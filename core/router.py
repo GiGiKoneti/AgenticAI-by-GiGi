@@ -13,10 +13,15 @@ AGENT_REGISTRY = {
 
 def route_and_execute(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Given a list of tasks from the decomposer, call the right agents.
+    Executes each agent in sequence.
+    Each agent receives:
+        - details from the decomposer
+        - previous agent outputs (context)
     """
+
     results = []
     route = []
+    shared_context = {}  # NEW: accumulate output here
 
     for task in tasks:
         agent_name = task.get("agent")
@@ -26,8 +31,24 @@ def route_and_execute(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
             results.append({"agent": agent_name, "error": "Unknown agent"})
             continue
 
-        output = agent.run(task.get("details", {}))
-        results.append({"agent": agent_name, "output": output})
+        # Merge context into agent details
+        details = task.get("details", {})
+        details["context"] = shared_context  # << ADD CONTEXT
+
+        output = agent.run(details)
+
+        # Save output into shared context for next agent
+        shared_context[agent_name] = output
+
+        results.append({
+            "agent": agent_name,
+            "input": details,
+            "output": output
+        })
         route.append(agent_name)
 
-    return {"results": results, "route": route}
+    return {
+        "results": results,
+        "route": route,
+        "shared_context": shared_context
+    }
